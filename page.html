@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Automation Interface</title>
+  <link rel="stylesheet" href="global.css">
+  <script src="utils.js" defer></script>
+</head>
+<body>
+  <div class="content">
+    <br><br> 
+    <!--  <label for="batch-filename">Batch filename:</label>
+    <input id="batch-filename" type="text" value="CIP_SN_Test.bat" style="margin-right:8px" />
+    <button id="run-bat-file" onclick="runBatchFile()">Run Batch</button>
+    !-->
+
+    <button id="run-copy-btn" type="button" onclick="runCopy()">Run Copy</button>
+    <div id="copy-status"></div>
+
+    <br><br>
+    <h2>SQL Query</h2>
+
+    <label for="db-select">Select Database:</label>
+    <select id="db-select" onchange="changeDatabase()">
+      <option value="EHSGIGECDSQL01.ehsa2.ca">Preprod GE (M-UAT)</option>
+      <option value="EHSGIMICDSQL01.ehsa2.ca">Preprod MI (M-UAT)</option>
+      <option value="EHSGICACDSQL01.ehsa2.ca">Preprod CA (M-UAT)</option>
+      <option value="EHSGIHACDSQL01.ehsa2.ca">Preprod HA (M-UAT)</option>
+      <option value="EHSGILOCDSQL01.ehsa2.ca">Preprod LO (M-UAT)</option>
+    </select>
+    <button id="toggleBtn" class="toggle-off" type="button">Auto Fetch: OFF</button>
+
+    <br><br>
+    <!-- <textarea id="query" rows="10" spellcheck="false">SELECT TOP (10) * FROM [CIP].[dbo].[CIPAnalytics] ORDER BY AddedDateTime DESC;</textarea> --> 
+    
+    <textarea id="query" rows="10" spellcheck="false">
+      SELECT a.master_incident_number,methodofcallRcvd as AAN_Status, Time_CallEnteredQueue,Problem,Response_Area
+      FROM [TSTA_System_930].dbo.response_master_incident a inner join [TSTA_System_930].dbo.Response_Comments  b 
+      ON b.master_incident_id=a.id 
+      WHERE a.Call_Is_Active=1
+      AND datediff(day, a.Time_CallEnteredQueue, getdate()) <=10
+      AND LTRIM(b.comment) LIKE '%CIP SN solution (SN01)] Fire notification SENT%' 
+      AND a.methodofcallRcvd not in ('FD-To','FD-C')
+      ORDER BY Time_CallEnteredQueue DESC;
+    </textarea>
+      
+    <div id="overlay" style="display:none;">
+      <div id="overlay-content" class="overlay-content"></div>
+    </div>
+    
+    <br>
+    <button type="button" onclick="sendSQLQuery(event)">Send Query</button>
+    <p id="timestamp"></p>
+
+    <div id="table-container">
+      <div id="response"></div>
+    </div>
+
+    <div id="batch-status" style="margin-top:12px;font-weight:bold"></div>
+
+  </div>
+
+  
+</body>
+</html>
