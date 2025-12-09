@@ -8,19 +8,11 @@
 ```bash
 pip install -r requirements.txt
 ```
-3. Create .env variable in the project root directory and put these 4 lines (Replace x with your credentials):
-```.env
-DB_HOST="x"
-DB_PORT="x"
-DB_USER="x"
-DB_PASS="x"
-```
-
-4. Run the python server using terminal or powershell:
+3. Run the python server using terminal or powershell:
 ```bash
 python main.py
 ```
-
-5. Launch **page.html** (double clicking should be enough)
+4. On first run you should see a GUI window, enter the details and save.
+5. Launch **CIP_SN.html** (double clicking should be enough)
 
 ***Note**: The program heavily relies on .bat files. Before clicking buttons or doing any actions please make sure the batch scripts in batch folder have the right directory (especially any ReadyAPI / SoapUI scripts)*

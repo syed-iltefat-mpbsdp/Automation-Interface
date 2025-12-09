@@ -1,17 +1,21 @@
 from flask import Flask, jsonify, request, make_response, current_app
 from extensions import db
-from config import SQLALCHEMY_DATABASE_URI, change_db_uri, get_server_info
+from config import SQLALCHEMY_DATABASE_URI, change_db_uri, get_server_info, read_config, change_db_info, PYTHON_SERVER_URL
 from sqlalchemy import text, create_engine
 from flask_cors import CORS
 from datetime import datetime, timezone
 from utils import copy_test_cases, run_batch_file, dump_rows_to_excel
 import os
-
+import sys
+from pathlib import Path
+from configparser import ConfigParser
+from urllib.parse import urlparse
 
 DATABASE_URL = SQLALCHEMY_DATABASE_URI 
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
+CONFIG_PATH = Path("settings.config")
 
 db.init_app(app)
 CORS(app)
@@ -31,7 +35,9 @@ def command_to_excel():
     caution_notes = data.get("caution_notes") or ""
     confidential = data.get("confidential") or ""
     output_file = data.get("output_file")
+    output_dir = data.get("output_dir") or "static"
     sheet_name = data.get("sheet")
+
 
     print(output_file, sheet_name)
 
@@ -43,10 +49,13 @@ def command_to_excel():
             'Hazard' : f'{hazard.lower()}',
             'Caution_notes':f'{caution_notes.lower()}',
             'Confidential':f'{confidential.lower()}'}]
-    output_dir = os.path.join("static")
-    os.makedirs(output_dir, exist_ok=True)
-    output_file = os.path.join(output_dir, output_file)
-    dump_result = dump_rows_to_excel(rows, output_file=output_file,sheet_name=sheet_name)
+    
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / output_file
+
+    print(output_path)
+    dump_result = dump_rows_to_excel(rows, output_file=str(output_path),sheet_name=sheet_name)
 
     if isinstance(dump_result, dict) and dump_result.get("error"):
         current_app.logger.error("dump_sql_to_excel: %s", dump_result["error"])
@@ -96,11 +105,14 @@ def dump_sql_to_excel():
             rows = [dict(row._mapping) for row in result]
             print(rows)
 
-        output_dir = os.path.join("static")
-        os.makedirs(output_dir, exist_ok=True)
 
-        output_file = os.path.join(output_dir, output_file)
-        dump_result = dump_rows_to_excel(rows, output_file, sheet_name=excel_sheet)
+        output_dir = Path("C:\\Users\\IltefaSy\\Downloads")
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        output_path = output_dir / output_file
+
+        print(output_file)
+        dump_result = dump_rows_to_excel(rows, str(output_path), sheet_name=excel_sheet)
 
         if isinstance(dump_result, dict) and dump_result.get("error"):
             current_app.logger.error("dump_sql_to_excel: %s", dump_result["error"])
@@ -172,6 +184,7 @@ def change_db():
     try:
         global DATABASE_URL
         DATABASE_URL = change_db_uri(new_url)
+        print(DATABASE_URL)
         app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
 
         return jsonify({"message": "Database url updated successfully", "new_uri": new_url})
@@ -230,6 +243,113 @@ def run_batch_script():
     resp.headers["Content-Type"] = "application/json"
     return resp
 
+@app.route("/change_settings", methods=["POST"])
+def change_settings():
+    data = request.get_json(silent=True) or {}
+    directory = data.get("directory")
+    default_server = data.get("default_server")
+    username = data.get("db_username")
+    password = data.get("db_password")
+    port = data.get("db_port")
+
+    if not directory:
+        return jsonify({"success": False, "error": "Missing 'directory'"}), 400
+
+    new_dir_path = Path(directory).expanduser()
+
+    if not new_dir_path.exists() or not new_dir_path.is_dir():
+        return jsonify({"success": False, "error": "Directory does not exist"}), 400
+    
+
+    new_dir = str(new_dir_path)
+
+    cfg = ConfigParser()
+    cfg.read(CONFIG_PATH)
+
+    # ensure the preferences section exists and set the keys you use in your config
+    if not cfg.has_section("preferences"):
+        cfg.add_section("preferences")
+    cfg.set("preferences", "output_dir", new_dir)
+
+    if default_server is not None and str(default_server).strip() != "":
+        cfg.set("preferences", "default_server", str(default_server).strip())
+
+    if username is not None and str(username).strip() != "":
+        cfg.set("preferences", "db_username", str(username).strip())
+
+    if password is not None and str(password) != "":
+        # encrypt password (pending) 
+        cfg.set("preferences", "db_password", str(password))
+
+    if port is not None:
+        cfg.set("preferences", "db_port", str(port))
+
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+        cfg.write(f)
+
+    resp = {"success": True, "output_dir": new_dir}
+    if default_server is not None and str(default_server).strip() != "":
+        resp["default_server"] = str(default_server).strip()
+
+    global DATABASE_URL
+    DATABASE_URL = change_db_info(user=username, password=password, port=port)
+    app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
+    with app.app_context():
+        db.session.remove()
+        db.engine.dispose()
+
+    return jsonify(resp), 200
+
+@app.route("/change_python_url", methods=["POST"])
+def chnage_python_url():
+    data = request.get_json(silent=True) or {}
+
+    python_server = data.get("python_server_url")
+    
+    if not python_server:
+        return jsonify({"success": False, "error": "No python server url given"}), 400
+
+    cfg = ConfigParser()
+    cfg.read(CONFIG_PATH)
+
+    # ensure the preferences section exists and set the keys you use in your config
+    if not cfg.has_section("preferences"):
+        cfg.add_section("preferences")
+
+    if python_server is not None:
+        cfg.set("preferences", "python_server_url", str(python_server))
+
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+        cfg.write(f)
+
+    resp = {"success": True, "new python url": python_server}
+
+    return jsonify(resp), 200
+
+
+@app.route("/get_settings", methods=["GET"])
+def get_settings():
+    try:
+        config_dict = read_config()
+    except FileNotFoundError:
+        print('Config File not found')
+        restart_server()
+        return jsonify({"success": False, "error": "Config file not found"}), 404
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+    return jsonify({"success": True, "config": config_dict}), 200
+
+@app.route("/restart_server", methods=["GET"])
+def restart_server():
+    python = sys.executable
+    os.execv(python, [python] + sys.argv)
+
 if __name__ == "__main__":
     with app.app_context():
-        app.run(host='127.0.0.1', port=5000, debug=True)
+        if not PYTHON_SERVER_URL.startswith(("http://", "https://")):
+            PYTHON_SERVER_URL = "http://" + PYTHON_SERVER_URL
+
+        p = urlparse(PYTHON_SERVER_URL)
+        host = p.hostname or "127.0.0.1"
+        port = p.port or 5000
+        app.run(host=host, port=port, debug=True)

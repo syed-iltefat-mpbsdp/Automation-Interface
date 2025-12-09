@@ -67,7 +67,7 @@ def run_batch_file(filename: str, file_path: str = "") -> Dict[str, Any]:
         print(f"started subprocess {filename}")
 
         is_windows = os.name == "nt"
-        timeout_seconds = 60
+        timeout_seconds = 120 # 2 minutes
 
         if is_windows:
             creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
